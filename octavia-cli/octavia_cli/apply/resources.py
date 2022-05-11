@@ -476,6 +476,23 @@ class Connection(BaseResource):
 
     resource_type = "connection"
 
+    remote_root_level_keys_to_filter_out_for_comparison = [
+        "name",
+        "source",
+        "destination",
+        "source_id",
+        "destination_id",
+        "connection_id",
+        "operation_ids",
+        "source_catalog_id",
+        "catalog_id",
+        "is_syncing",
+        "latest_sync_job_status",
+        "latest_sync_job_created_at",
+    ]  # We do not allow local editing of these keys
+
+    remote_operation_level_keys_to_filter_out = ["workspace_id", "operation_id"]  # We do not allow local editing of these keys
+
     def _deserialize_raw_configuration(self):
         """Deserialize a raw configuration into another dict and perform serialization if needed.
         In this implementation we cast raw types to Airbyte API client models types for validation.
@@ -632,28 +649,18 @@ class Connection(BaseResource):
             )
 
     def _get_remote_comparable_configuration(self) -> dict:
-        root_level_keys_to_filter_out = [
-            "name",
-            "source",
-            "destination",
-            "source_id",
-            "destination_id",
-            "connection_id",
-            "operation_ids",
-            "source_catalog_id",
-            "catalog_id",
-            "is_syncing",
-            "latest_sync_job_status",
-            "latest_sync_job_created_at",
-        ]  # We do not allow local editing of these keys
-        comparable = {k: v for k, v in self.remote_resource.to_dict().items() if k not in root_level_keys_to_filter_out}
+
+        comparable = {
+            k: v for k, v in self.remote_resource.to_dict().items() if k not in self.remote_root_level_keys_to_filter_out_for_comparison
+        }
         if "operations" in comparable:
-            operation_level_keys_to_filter_out = ["workspace_id", "operation_id"]
             for operation in comparable["operations"]:
-                for k in operation_level_keys_to_filter_out:
+                for k in self.remote_operation_level_keys_to_filter_out:
                     operation.pop(k)
                 if "dbt" in operation["operator_configuration"] and operation["operator_configuration"]["dbt"] is None:
                     operation["operator_configuration"].pop("dbt")
+                if "normalization" in operation["operator_configuration"] and operation["operator_configuration"]["normalization"] is None:
+                    operation["operator_configuration"].pop("normalization")
         return comparable
 
 

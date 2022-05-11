@@ -542,26 +542,59 @@ class TestConnection:
         )
         assert isinstance(connection.update_payload["operations"][0], WebBackendOperationCreateOrUpdate)
 
-    def test_get_remote_comparable_configuration(self, mocker, mock_api_client, connection_configuration):
+    @pytest.mark.parametrize(
+        "remote_resource",
+        [
+            {
+                "name": "foo",
+                "source_id": "bar",
+                "destination_id": "fooo",
+                "connection_id": "baar",
+                "operation_ids": "foooo",
+                "foo": "bar",
+            },
+            {
+                "name": "foo",
+                "source_id": "bar",
+                "destination_id": "fooo",
+                "connection_id": "baar",
+                "operation_ids": "foooo",
+                "foo": "bar",
+                "operations": [
+                    {"workspace_id": "foo", "operation_id": "foo", "operator_configuration": {"normalization": "foo", "dbt": None}}
+                ],
+            },
+            {
+                "name": "foo",
+                "source_id": "bar",
+                "destination_id": "fooo",
+                "connection_id": "baar",
+                "operation_ids": "foooo",
+                "foo": "bar",
+                "operations": [
+                    {"workspace_id": "foo", "operation_id": "foo", "operator_configuration": {"normalization": None, "dbt": "foo"}}
+                ],
+            },
+        ],
+    )
+    def test_get_remote_comparable_configuration(self, mocker, mock_api_client, connection_configuration, remote_resource):
         mocker.patch.object(
             resources.Connection,
             "remote_resource",
-            mocker.Mock(
-                to_dict=mocker.Mock(
-                    return_value={
-                        "name": "foo",
-                        "source_id": "bar",
-                        "destination_id": "fooo",
-                        "connection_id": "baar",
-                        "operation_ids": "foooo",
-                        "foo": "bar",
-                    }
-                )
-            ),
+            mocker.Mock(to_dict=mocker.Mock(return_value=remote_resource)),
         )
         resource = resources.Connection(mock_api_client, "workspace_id", connection_configuration, "bar.yaml")
-        assert resource._get_remote_comparable_configuration() == {"foo": "bar"}
+        comparable = resource._get_remote_comparable_configuration()
         resource.remote_resource.to_dict.assert_called_once()
+
+        assert isinstance(comparable, dict)
+        assert all([k not in comparable for k in resource.remote_root_level_keys_to_filter_out_for_comparison])
+        if "operations" in remote_resource:
+            assert all([k not in comparable["operations"][0] for k in resource.remote_operation_level_keys_to_filter_out])
+            if remote_resource["operations"][0]["operator_configuration"].get("normalization") is not None:
+                assert "dbt" not in remote_resource["operations"][0]["operator_configuration"]
+            if remote_resource["operations"][0]["operator_configuration"].get("dbt") is not None:
+                assert "normalization" not in remote_resource["operations"][0]["operator_configuration"]
 
     def test_create(self, mocker, mock_api_client, connection_configuration):
         mocker.patch.object(resources.Connection, "_create_or_update")
